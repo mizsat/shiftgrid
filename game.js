@@ -16,12 +16,12 @@ const LEVELS = [
     name: "1",
     map: [
       "##########",
-      "#      . #",
-      "# .   #  #",
-      "#   $$   #",
-      "# . # $  #",
-      "#   @    #",
-      "#        #",
+      "# .   #. #",
+      "#  ##    #",
+      "# $  #   #",
+      "#  $ # . #",
+      "#   $@ # #",
+      "#   ##   #",
       "##########"
     ]
   },
@@ -29,12 +29,12 @@ const LEVELS = [
     name: "2",
     map: [
       "##########",
-      "# .   #  #",
-      "#   $ #. #",
-      "# ##  #  #",
-      "#  $ $#  #",
-      "#  #  @. #",
-      "#        #",
+      "# .#   . #",
+      "#    ##  #",
+      "#   #  $ #",
+      "# . ##$  #",
+      "# # @$   #",
+      "#   #    #",
       "##########"
     ]
   },
@@ -42,12 +42,12 @@ const LEVELS = [
     name: "3",
     map: [
       "##########",
-      "# .    ###",
-      "# # #   .#",
-      "# $ #    #",
-      "# # $$#  #",
-      "#   @  . #",
-      "#        #",
+      "#    #   #",
+      "#   $@ # #",
+      "#  $ # . #",
+      "# $# #   #",
+      "#  ##    #",
+      "##.   #. #",
       "##########"
     ]
   },
@@ -55,12 +55,12 @@ const LEVELS = [
     name: "4",
     map: [
       "##########",
-      "#  .     #",
-      "# ###  . #",
-      "#   $   ##",
-      "# $ ###  #",
-      "# # @ $ .#",
-      "#        #",
+      "##.   #. #",
+      "#  ##    #",
+      "# $  #   #",
+      "## $ # . #",
+      "#   $@ # #",
+      "#    #   #",
       "##########"
     ]
   },
@@ -68,12 +68,12 @@ const LEVELS = [
     name: "5",
     map: [
       "##########",
-      "# .   #. #",
-      "#  ##    #",
-      "# $  #   #",
-      "#  $ # . #",
-      "#   $@ # #",
-      "#  #     #",
+      "#   #    #",
+      "# # @$ # #",
+      "# . # $  #",
+      "#   #  $##",
+      "#    ##  #",
+      "# .#   . #",
       "##########"
     ]
   }
@@ -88,6 +88,9 @@ const pushCount = document.querySelector("#pushCount");
 const levelSelect = document.querySelector("#levelSelect");
 const clearBanner = document.querySelector("#clearBanner");
 
+const GOAL_EFFECT_DURATION = 320;
+const CLEAR_EFFECT_DURATION = 520;
+
 let state;
 let currentLevel = 0;
 let history = [];
@@ -95,6 +98,10 @@ let moves = 0;
 let pushes = 0;
 let won = false;
 let clearedLevels = new Set();
+let goalEffects = [];
+let clearEffectStart = 0;
+let animationFrameId = null;
+let clearBannerTimer = 0;
 
 const directions = {
   ArrowUp: { x: 0, y: -1 },
@@ -143,6 +150,7 @@ function cloneState() {
 }
 
 function restore(snapshot) {
+  resetEffects();
   state = {
     width: snapshot.width,
     height: snapshot.height,
@@ -159,6 +167,7 @@ function restore(snapshot) {
 }
 
 function loadLevel(index) {
+  resetEffects();
   currentLevel = (index + LEVELS.length) % LEVELS.length;
   state = makeState(LEVELS[currentLevel]);
   history = [];
@@ -200,6 +209,10 @@ function movePlayer(dir) {
     state.boxes.delete(nextKey);
     state.boxes.add(boxNextKey);
     pushes += 1;
+
+    if (state.goals.has(boxNextKey)) {
+      addGoalEffect(bx, by);
+    }
   }
 
   won = [...state.boxes].every((box) => state.goals.has(box));
@@ -207,9 +220,10 @@ function movePlayer(dir) {
 
   if (won) {
     markLevelCleared(currentLevel);
-    window.setTimeout(() => {
+    startClearEffect();
+    clearBannerTimer = window.setTimeout(() => {
       clearBanner.hidden = false;
-    }, 180);
+    }, CLEAR_EFFECT_DURATION);
   }
 }
 
@@ -219,6 +233,8 @@ function undo() {
 }
 
 function draw() {
+  const now = performance.now();
+
   resizeCanvas();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -249,7 +265,10 @@ function draw() {
   });
 
   drawPlayer(offsetX + state.player.x * TILE, offsetY + state.player.y * TILE);
+  drawGoalEffects(offsetX, offsetY, now);
+  drawClearEffect(now);
   updateHud();
+  pruneEffects(now);
 }
 
 function resizeCanvas() {
@@ -276,7 +295,7 @@ function withTile(tx, ty, drawFn) {
 }
 
 function drawBackdrop() {
-  ctx.fillStyle = "#c9ecff";
+  ctx.fillStyle = "#e6f6ff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
@@ -298,7 +317,7 @@ function drawGoal(tx, ty) {
 
 function drawWall(tx, ty) {
   withTile(tx, ty, () => {
-    px(1, 1, 14, 14, "#2d2e55");
+    px(1, 1, 14, 14, "#6474a6");
   });
 }
 
@@ -315,9 +334,101 @@ function drawPlayer(tx, ty) {
     px(4, 3, 8, 1, "#16c784");
     px(3, 4, 10, 8, "#16c784");
     px(4, 12, 8, 1, "#16c784");
-    px(7, 5, 2, 6, "#ffffff");
-    px(5, 7, 6, 2, "#ffffff");
+    px(5, 6, 2, 2, "#ffffff");
+    px(9, 6, 2, 2, "#ffffff");
   });
+}
+
+function addGoalEffect(x, y) {
+  goalEffects.push({ x, y, start: performance.now() });
+  requestEffectFrame();
+}
+
+function startClearEffect() {
+  clearEffectStart = performance.now();
+  requestEffectFrame();
+}
+
+function resetEffects() {
+  goalEffects = [];
+  clearEffectStart = 0;
+
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
+
+  if (clearBannerTimer) {
+    clearTimeout(clearBannerTimer);
+    clearBannerTimer = 0;
+  }
+}
+
+function requestEffectFrame() {
+  if (animationFrameId) return;
+
+  animationFrameId = requestAnimationFrame(() => {
+    animationFrameId = null;
+    draw();
+
+    if (hasActiveEffects(performance.now())) {
+      requestEffectFrame();
+    }
+  });
+}
+
+function hasActiveEffects(now) {
+  const hasGoalEffects = goalEffects.some((effect) => now - effect.start < GOAL_EFFECT_DURATION);
+  const hasClearEffect = clearEffectStart && now - clearEffectStart < CLEAR_EFFECT_DURATION;
+  return hasGoalEffects || hasClearEffect;
+}
+
+function pruneEffects(now) {
+  goalEffects = goalEffects.filter((effect) => now - effect.start < GOAL_EFFECT_DURATION);
+}
+
+function drawGoalEffects(offsetX, offsetY, now) {
+  goalEffects.forEach((effect) => {
+    const progress = Math.min((now - effect.start) / GOAL_EFFECT_DURATION, 1);
+    const tx = offsetX + effect.x * TILE;
+    const ty = offsetY + effect.y * TILE;
+    drawGoalPulse(tx, ty, progress);
+  });
+}
+
+function drawGoalPulse(tx, ty, progress) {
+  withTile(tx, ty, () => {
+    ctx.globalAlpha = 1 - progress;
+    px(1, 1, 14, 1, "#ffffff");
+    px(1, 14, 14, 1, "#ffffff");
+    px(1, 1, 1, 14, "#ffffff");
+    px(14, 1, 1, 14, "#ffffff");
+    ctx.globalAlpha = Math.max(0, 0.7 - progress);
+    px(0, 0, 2, 2, "#ff4f86");
+    px(14, 0, 2, 2, "#ff4f86");
+    px(0, 14, 2, 2, "#ff4f86");
+    px(14, 14, 2, 2, "#ff4f86");
+    ctx.globalAlpha = 1;
+  });
+}
+
+function drawClearEffect(now) {
+  if (!clearEffectStart) return;
+
+  const progress = (now - clearEffectStart) / CLEAR_EFFECT_DURATION;
+  if (progress >= 1) {
+    clearEffectStart = 0;
+    return;
+  }
+
+  ctx.globalAlpha = Math.max(0, 0.22 * (1 - progress));
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.globalAlpha = Math.max(0, 0.32 * (1 - progress));
+  ctx.strokeStyle = "#ff4f86";
+  ctx.lineWidth = Math.max(2, Math.round(TILE / 14));
+  ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+  ctx.globalAlpha = 1;
 }
 
 function updateHud() {
