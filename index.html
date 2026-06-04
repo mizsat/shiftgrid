@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SHIFTGRID</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="app">
+      <section class="game">
+        <header class="topbar">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <h1>SHIFTGRID</h1>
+          </div>
+          <div class="stats" aria-live="polite">
+            <span><b id="levelNumber">1</b>/<b id="levelTotal">1</b></span>
+            <span><b id="moveCount">0</b> MOVE</span>
+            <span><b id="pushCount">0</b> PUSH</span>
+          </div>
+        </header>
+
+        <div class="stage-wrap">
+          <canvas id="board" width="640" height="512" aria-label="game board"></canvas>
+        </div>
+
+        <footer class="toolbar">
+          <button id="prevLevel" type="button" title="Previous" aria-label="Previous">‹</button>
+          <button id="undo" type="button" title="Undo" aria-label="Undo">↶</button>
+          <button id="reset" type="button" title="Reset" aria-label="Reset">⟲</button>
+          <button id="nextLevel" type="button" title="Next" aria-label="Next">›</button>
+        </footer>
+
+        <nav id="levelSelect" class="levels" aria-label="Level select"></nav>
+      </section>
+    </main>
+
+    <div id="clearBanner" class="clear-banner" hidden>
+      <div>
+        <p>STAGE CLEAR</p>
+        <button id="continue" type="button">NEXT</button>
+      </div>
+    </div>
+
+    <script src="./game.js"></script>
+  </body>
+</html>
